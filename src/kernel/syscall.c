@@ -76,6 +76,13 @@ void syscall_handler(registers_t* regs) {
             regs->eax = scheduler_get_current_pid();
             break;
             
+        case SYS_FREE: {
+            void* ptr = (void*)regs->ebx;
+            kfree(ptr);
+            regs->eax = 0;
+            break;
+        }
+            
         default:
             vga_puts("[SYSCALL] Unknown syscall: ", 0x1C);
             regs->eax = (uint32_t)-1;
@@ -135,4 +142,12 @@ uint32_t sys_getpid(void) {
         : "memory"
     );
     return ret;
+}
+
+void sys_free(void* ptr) {
+    __asm__ __volatile__(
+        "int $0x80"
+        : : "a"(SYS_FREE), "b"(ptr)
+        : "memory"
+    );
 }

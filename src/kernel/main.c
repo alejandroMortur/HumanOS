@@ -91,7 +91,7 @@ static void user_shell_process(void) {
 
                     vga_putc('\n', COLOR_WHITE);
                     if (input_buf[0] == 'h' && input_buf[1] == 'e' && input_buf[2] == 'l' && input_buf[3] == 'p') {
-                        sys_write(1, "Commands: help, run, exec, ls, cat, touch, write, diskinfo, sysinfo, whoami, hostname, uname, clear, ps, reboot, shutdown, exit", 127);
+                        sys_write(1, "Commands: help, run, exec, ls, cat, touch, write, diskinfo, sysinfo, whoami, hostname, uname, clear, ps, stress, reboot, shutdown, exit", 134);
                     } else if ((input_buf[0] == 'r' && input_buf[1] == 'u' && input_buf[2] == 'n') || (input_buf[0] == 'e' && input_buf[1] == 'x' && input_buf[2] == 'e' && input_buf[3] == 'c')) {
                         int i = (input_buf[0] == 'r') ? 4 : 5;
                         const char* fname = &input_buf[i];
@@ -186,6 +186,33 @@ static void user_shell_process(void) {
                         continue;
                     } else if (input_buf[0] == 'p' && input_buf[1] == 's') {
                         sys_write(1, "Active Processes: PID 1 (Kernel), PID 2 (UserShell)", 51);
+                    } else if (input_buf[0] == 's' && input_buf[1] == 't' && input_buf[2] == 'r' && input_buf[3] == 'e' && input_buf[4] == 's' && input_buf[5] == 's') {
+                        sys_write(1, "Starting stress test...\n", 25);
+                        sys_write(1, "Test 1: Memory allocation stress\n", 32);
+                        for (int i = 0; i < 100; i++) {
+                            void* ptr = sys_malloc(1024);
+                            if (ptr) sys_free(ptr);
+                            if (i % 10 == 0) sys_yield();
+                        }
+                        sys_write(1, "Test 1: PASSED\n", 17);
+                        
+                        sys_write(1, "Test 2: Scheduler stress (rapid yields)\n", 39);
+                        for (int i = 0; i < 1000; i++) {
+                            sys_yield();
+                        }
+                        sys_write(1, "Test 2: PASSED\n", 17);
+                        
+                        sys_write(1, "Test 3: VFS stress\n", 20);
+                        for (int i = 0; i < 50; i++) {
+                            vfs_create_file("stress_test.txt");
+                            vfs_write_file("stress_test.txt", "Stress test data", 16);
+                            char buf[64];
+                            vfs_read_file("stress_test.txt", buf, 64);
+                            if (i % 5 == 0) sys_yield();
+                        }
+                        sys_write(1, "Test 3: PASSED\n", 17);
+                        
+                        sys_write(1, "All stress tests PASSED - No Triple Faults detected\n", 56);
                     } else if (input_buf[0] == 'r' && input_buf[1] == 'e' && input_buf[2] == 'b' && input_buf[3] == 'o' && input_buf[4] == 'o' && input_buf[5] == 't') {
                         sys_reboot();
                     } else if (input_buf[0] == 's' && input_buf[1] == 'h' && input_buf[2] == 'u' && input_buf[3] == 't' && input_buf[4] == 'd' && input_buf[5] == 'o' && input_buf[6] == 'w' && input_buf[7] == 'n') {

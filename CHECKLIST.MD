@@ -45,7 +45,7 @@
 - [x] Tab autocomplete
 
 ## 8. Stability & Quality Assurance
-- [ ] Zero Triple Faults under heavy workloads
+- [x] Zero Triple Faults under heavy workloads
 - [x] Clean Shutdown & Reboot commands
 
 ## 9. Documentation

@@ -192,15 +192,33 @@ static void user_shell_process(void) {
                         for (int i = 0; i < 100; i++) {
                             void* ptr = sys_malloc(1024);
                             if (ptr) sys_free(ptr);
-                            if (i % 10 == 0) sys_yield();
+                            if (i % 10 == 0) {
+                                char pbuf[16];
+                                int pj = 0;
+                                int cnt = i;
+                                while (cnt > 0 && pj < 15) { pbuf[pj++] = '0' + (cnt % 10); cnt /= 10; }
+                                if (i == 0) { pbuf[pj++] = '0'; pj = 1; }
+                                for (int k = pj - 1; k >= 0; k--) sys_write(1, &pbuf[k], 1);
+                                sys_write(1, "/100\r", 6);
+                            }
+                            sys_yield();
                         }
-                        sys_write(1, "Test 1: PASSED\n", 17);
+                        sys_write(1, "\nTest 1: PASSED\n", 18);
                         
                         sys_write(1, "Test 2: Scheduler stress (rapid yields)\n", 39);
                         for (int i = 0; i < 100; i++) {
+                            if (i % 10 == 0) {
+                                char pbuf[16];
+                                int pj = 0;
+                                int cnt = i;
+                                while (cnt > 0 && pj < 15) { pbuf[pj++] = '0' + (cnt % 10); cnt /= 10; }
+                                if (i == 0) { pbuf[pj++] = '0'; pj = 1; }
+                                for (int k = pj - 1; k >= 0; k--) sys_write(1, &pbuf[k], 1);
+                                sys_write(1, "/100\r", 6);
+                            }
                             sys_yield();
                         }
-                        sys_write(1, "Test 2: PASSED\n", 17);
+                        sys_write(1, "\nTest 2: PASSED\n", 18);
                         
                         sys_write(1, "Test 3: VFS stress\n", 20);
                         for (int i = 0; i < 50; i++) {
@@ -208,9 +226,18 @@ static void user_shell_process(void) {
                             vfs_write_file("stress_test.txt", "Stress test data", 16);
                             char buf[64];
                             vfs_read_file("stress_test.txt", buf, 64);
-                            if (i % 5 == 0) sys_yield();
+                            if (i % 5 == 0) {
+                                char pbuf[16];
+                                int pj = 0;
+                                int cnt = i;
+                                while (cnt > 0 && pj < 15) { pbuf[pj++] = '0' + (cnt % 10); cnt /= 10; }
+                                if (i == 0) { pbuf[pj++] = '0'; pj = 1; }
+                                for (int k = pj - 1; k >= 0; k--) sys_write(1, &pbuf[k], 1);
+                                sys_write(1, "/50\r", 5);
+                            }
+                            sys_yield();
                         }
-                        sys_write(1, "Test 3: PASSED\n", 17);
+                        sys_write(1, "\nTest 3: PASSED\n", 17);
                         
                         sys_write(1, "All stress tests PASSED - No Triple Faults detected\n", 56);
                     } else if (input_buf[0] == 'r' && input_buf[1] == 'e' && input_buf[2] == 'b' && input_buf[3] == 'o' && input_buf[4] == 'o' && input_buf[5] == 't') {

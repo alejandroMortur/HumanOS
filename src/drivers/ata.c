@@ -25,11 +25,41 @@ static inline void outw(uint16_t port, uint16_t val) {
 static uint32_t disk_sector_count = 0;
 static char disk_model[41];
 static int disk_present = 0;
+static int use_secondary = 0; // 0 = primary, 1 = secondary
+
+// Helper functions to get correct port based on channel
+static inline uint16_t ata_data_port(void) {
+    return use_secondary ? ATA_SECONDARY_DATA : ATA_PRIMARY_DATA;
+}
+
+static inline uint16_t ata_comm_stat_port(void) {
+    return use_secondary ? ATA_SECONDARY_COMM_STAT : ATA_PRIMARY_COMM_STAT;
+}
+
+static inline uint16_t ata_drive_head_port(void) {
+    return use_secondary ? ATA_SECONDARY_DRIVE_HEAD : ATA_PRIMARY_DRIVE_HEAD;
+}
+
+static inline uint16_t ata_seccount_port(void) {
+    return use_secondary ? ATA_SECONDARY_SECCOUNT : ATA_PRIMARY_SECCOUNT;
+}
+
+static inline uint16_t ata_lba_lo_port(void) {
+    return use_secondary ? ATA_SECONDARY_LBA_LO : ATA_PRIMARY_LBA_LO;
+}
+
+static inline uint16_t ata_lba_mid_port(void) {
+    return use_secondary ? ATA_SECONDARY_LBA_MID : ATA_PRIMARY_LBA_MID;
+}
+
+static inline uint16_t ata_lba_hi_port(void) {
+    return use_secondary ? ATA_SECONDARY_LBA_HI : ATA_PRIMARY_LBA_HI;
+}
 
 static int ata_wait_bsy(void) {
     uint32_t timeout = 100000;
     while (timeout-- > 0) {
-        uint8_t status = inb(ATA_PRIMARY_COMM_STAT);
+        uint8_t status = inb(ata_comm_stat_port());
         if (status == 0xFF) return 0; // Floating bus (No disk)
         if (!(status & ATA_STAT_BSY)) return 1; // BSY cleared
     }
@@ -39,7 +69,7 @@ static int ata_wait_bsy(void) {
 static int ata_wait_drq(void) {
     uint32_t timeout = 100000;
     while (timeout-- > 0) {
-        uint8_t status = inb(ATA_PRIMARY_COMM_STAT);
+        uint8_t status = inb(ata_comm_stat_port());
         if (status == 0xFF) return 0;
         if (status & ATA_STAT_DRQ) return 1; // DRQ ready
     }
@@ -47,6 +77,8 @@ static int ata_wait_drq(void) {
 }
 
 int ata_identify(void) {
+    // Try Primary Master first
+    use_secondary = 0;
     outb(ATA_PRIMARY_DRIVE_HEAD, 0xA0);
     outb(ATA_PRIMARY_SECCOUNT, 0);
     outb(ATA_PRIMARY_LBA_LO, 0);
@@ -56,8 +88,20 @@ int ata_identify(void) {
 
     uint8_t status = inb(ATA_PRIMARY_COMM_STAT);
     if (status == 0 || status == 0xFF) {
-        disk_present = 0;
-        return 0; // Disco no presente
+        // Try Secondary Master
+        use_secondary = 1;
+        outb(ATA_SECONDARY_DRIVE_HEAD, 0xA0);
+        outb(ATA_SECONDARY_SECCOUNT, 0);
+        outb(ATA_SECONDARY_LBA_LO, 0);
+        outb(ATA_SECONDARY_LBA_MID, 0);
+        outb(ATA_SECONDARY_LBA_HI, 0);
+        outb(ATA_SECONDARY_COMM_STAT, ATA_CMD_IDENTIFY);
+
+        status = inb(ATA_SECONDARY_COMM_STAT);
+        if (status == 0 || status == 0xFF) {
+            disk_present = 0;
+            return 0; // No disk on either primary or secondary
+        }
     }
 
     if (!ata_wait_bsy()) {
@@ -65,7 +109,7 @@ int ata_identify(void) {
         return 0;
     }
 
-    if (inb(ATA_PRIMARY_LBA_MID) != 0 || inb(ATA_PRIMARY_LBA_HI) != 0) {
+    if (inb(ata_lba_mid_port()) != 0 || inb(ata_lba_hi_port()) != 0) {
         disk_present = 0;
         return 0; // Dispositivo no ATA (ATAPI u otro)
     }
@@ -78,7 +122,7 @@ int ata_identify(void) {
     // Leer 256 palabras (512 bytes) de datos IDENTIFY
     uint16_t identify_buf[256];
     for (int i = 0; i < 256; i++) {
-        identify_buf[i] = inw(ATA_PRIMARY_DATA);
+        identify_buf[i] = inw(ata_data_port());
     }
 
     // Extraer modelo del disco (Palabras 27-46)
@@ -125,18 +169,18 @@ int ata_read_sector(uint32_t lba, uint8_t* buffer) {
 
     if (!ata_wait_bsy()) return -1;
 
-    outb(ATA_PRIMARY_DRIVE_HEAD, 0xE0 | ((lba >> 24) & 0x0F));
-    outb(ATA_PRIMARY_SECCOUNT, 1);
-    outb(ATA_PRIMARY_LBA_LO, (uint8_t)lba);
-    outb(ATA_PRIMARY_LBA_MID, (uint8_t)(lba >> 8));
-    outb(ATA_PRIMARY_LBA_HI, (uint8_t)(lba >> 16));
-    outb(ATA_PRIMARY_COMM_STAT, ATA_CMD_READ_SECTORS);
+    outb(ata_drive_head_port(), 0xE0 | ((lba >> 24) & 0x0F));
+    outb(ata_seccount_port(), 1);
+    outb(ata_lba_lo_port(), (uint8_t)lba);
+    outb(ata_lba_mid_port(), (uint8_t)(lba >> 8));
+    outb(ata_lba_hi_port(), (uint8_t)(lba >> 16));
+    outb(ata_comm_stat_port(), ATA_CMD_READ_SECTORS);
 
     if (!ata_wait_bsy() || !ata_wait_drq()) return -1;
 
     uint16_t* ptr = (uint16_t*)buffer;
     for (int i = 0; i < 256; i++) {
-        ptr[i] = inw(ATA_PRIMARY_DATA);
+        ptr[i] = inw(ata_data_port());
     }
 
     return 0;
@@ -147,21 +191,21 @@ int ata_write_sector(uint32_t lba, const uint8_t* buffer) {
 
     if (!ata_wait_bsy()) return -1;
 
-    outb(ATA_PRIMARY_DRIVE_HEAD, 0xE0 | ((lba >> 24) & 0x0F));
-    outb(ATA_PRIMARY_SECCOUNT, 1);
-    outb(ATA_PRIMARY_LBA_LO, (uint8_t)lba);
-    outb(ATA_PRIMARY_LBA_MID, (uint8_t)(lba >> 8));
-    outb(ATA_PRIMARY_LBA_HI, (uint8_t)(lba >> 16));
-    outb(ATA_PRIMARY_COMM_STAT, ATA_CMD_WRITE_SECTORS);
+    outb(ata_drive_head_port(), 0xE0 | ((lba >> 24) & 0x0F));
+    outb(ata_seccount_port(), 1);
+    outb(ata_lba_lo_port(), (uint8_t)lba);
+    outb(ata_lba_mid_port(), (uint8_t)(lba >> 8));
+    outb(ata_lba_hi_port(), (uint8_t)(lba >> 16));
+    outb(ata_comm_stat_port(), ATA_CMD_WRITE_SECTORS);
 
     if (!ata_wait_bsy() || !ata_wait_drq()) return -1;
 
     const uint16_t* ptr = (const uint16_t*)buffer;
     for (int i = 0; i < 256; i++) {
-        outw(ATA_PRIMARY_DATA, ptr[i]);
+        outw(ata_data_port(), ptr[i]);
     }
 
-    outb(ATA_PRIMARY_COMM_STAT, 0xE7); // Cache Flush
+    outb(ata_comm_stat_port(), 0xE7); // Cache Flush
     (void)ata_wait_bsy();
 
     return 0;

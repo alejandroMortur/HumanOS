@@ -205,3 +205,21 @@ void vfs_list_files(void) {
         vga_puts("  (No files stored on disk)\n", COLOR_WHITE);
     }
 }
+
+int vfs_delete_file(const char* name) {
+    if (name == NULL || name[0] == '\0') return -1;
+
+    vfs_sync_from_disk();
+
+    for (int i = 0; i < MAX_FILES; i++) {
+        if (file_table[i].used && strcmp_impl(file_table[i].name, name) == 0) {
+            file_table[i].used = 0;
+            file_table[i].size = 0;
+            file_table[i].name[0] = '\0';
+            vfs_sync_to_disk();
+            return 0;
+        }
+    }
+
+    return -1; // Archivo no encontrado
+}

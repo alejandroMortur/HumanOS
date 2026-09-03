@@ -91,7 +91,7 @@ static void user_shell_process(void) {
 
                     vga_putc('\n', COLOR_WHITE);
                     if (input_buf[0] == 'h' && input_buf[1] == 'e' && input_buf[2] == 'l' && input_buf[3] == 'p') {
-                        sys_write(1, "Commands: help, run, exec, ls, cat, touch, write, diskinfo, sysinfo, whoami, hostname, uname, clear, ps, stress, reboot, shutdown, exit", 134);
+                        sys_write(1, "Commands: help, run, exec, ls, cat, touch, write, rm, diskinfo, sysinfo, whoami, hostname, uname, clear, ps, stress, reboot, shutdown, exit", 138);
                     } else if ((input_buf[0] == 'r' && input_buf[1] == 'u' && input_buf[2] == 'n') || (input_buf[0] == 'e' && input_buf[1] == 'x' && input_buf[2] == 'e' && input_buf[3] == 'c')) {
                         int i = (input_buf[0] == 'r') ? 4 : 5;
                         const char* fname = &input_buf[i];
@@ -168,6 +168,18 @@ static void user_shell_process(void) {
                             vga_puts(" bytes to ", COLOR_LIGHT_GREEN);
                             vga_puts(fname, COLOR_WHITE);
                             vga_puts(" on disk!\n", COLOR_LIGHT_GREEN);
+                        }
+                    } else if (input_buf[0] == 'r' && input_buf[1] == 'm') {
+                        const char* fname = &input_buf[3];
+                        if (fname[0] != '\0') {
+                            int result = vfs_delete_file(fname);
+                            if (result == 0) {
+                                vga_puts("  File deleted: ", COLOR_LIGHT_GREEN);
+                                vga_puts(fname, COLOR_WHITE);
+                                vga_putc('\n', COLOR_WHITE);
+                            } else {
+                                sys_write(1, "  File not found.", 17);
+                            }
                         }
                     } else if (input_buf[0] == 'w' && input_buf[1] == 'h' && input_buf[2] == 'o' && input_buf[3] == 'a' && input_buf[4] == 'm' && input_buf[5] == 'i') {
                         sys_write(1, "user", 4);

@@ -2,6 +2,7 @@
 #include "scheduler.h"
 #include "vga.h"
 #include "heap.h"
+#include "power.h"
 #include <stdint.h>
 
 #ifndef NULL
@@ -82,6 +83,14 @@ void syscall_handler(registers_t* regs) {
             regs->eax = 0;
             break;
         }
+
+        case SYS_SHUTDOWN:
+            power_shutdown();
+            break;
+
+        case SYS_REBOOT:
+            power_reboot();
+            break;
             
         default:
             vga_puts("[SYSCALL] Unknown syscall: ", 0x1C);
@@ -148,6 +157,22 @@ void sys_free(void* ptr) {
     __asm__ __volatile__(
         "int $0x80"
         : : "a"(SYS_FREE), "b"(ptr)
+        : "memory"
+    );
+}
+
+void sys_shutdown(void) {
+    __asm__ __volatile__(
+        "int $0x80"
+        : : "a"(SYS_SHUTDOWN)
+        : "memory"
+    );
+}
+
+void sys_reboot(void) {
+    __asm__ __volatile__(
+        "int $0x80"
+        : : "a"(SYS_REBOOT)
         : "memory"
     );
 }

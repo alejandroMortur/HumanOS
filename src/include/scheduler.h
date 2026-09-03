@@ -56,5 +56,6 @@ process_t* scheduler_get_current_process(void);
 void process_exit(int exit_code);
 int process_kill(uint32_t pid);
 int process_wait(uint32_t pid);
+void scheduler_terminate_all(void);
 
 #endif

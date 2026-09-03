@@ -43,5 +43,6 @@ int ata_read_sector(uint32_t lba, uint8_t* buffer);
 int ata_write_sector(uint32_t lba, const uint8_t* buffer);
 uint32_t ata_get_sector_count(void);
 const char* ata_get_model(void);
+void ata_flush(void);
 
 #endif

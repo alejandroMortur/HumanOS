@@ -394,3 +394,13 @@ void scheduler_check(void) {
         scheduler_yield();
     }
 }
+
+// Terminar todos los procesos activos excepto el proceso invocador de apagado
+void scheduler_terminate_all(void) {
+    uint32_t curr_pid = scheduler_get_current_pid();
+    for (uint32_t i = 0; i < process_count; i++) {
+        if (processes[i] != NULL && processes[i]->pid != curr_pid) {
+            processes[i]->state = PROCESS_TERMINATED;
+        }
+    }
+}

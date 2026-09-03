@@ -21,5 +21,7 @@ int vfs_write_file(const char* name, const char* content, uint32_t len);
 int vfs_read_file(const char* name, char* buffer, uint32_t max_len);
 void vfs_list_files(void);
 int vfs_delete_file(const char* name);
+int vfs_get_filename(int index, char* out_name);
+void vfs_sync(void);
 
 #endif

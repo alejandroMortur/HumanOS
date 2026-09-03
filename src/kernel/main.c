@@ -370,37 +370,41 @@ static void user_shell_process(void) {
                             input_buf[buf_idx] = '\0';
                         }
                     } else {
-                        // Autocompletar argumento de archivo (ej. cat read -> cat readme.txt)
+                        // Autocompletar argumento de archivo buscando dinámicamente en el VFS
                         const char* arg = &input_buf[space_pos + 1];
                         int arg_len = 0;
                         while (arg[arg_len] != '\0') arg_len++;
 
-                        if (arg_len > 0) {
-                            static const char* sample_files[] = { "readme.txt", NULL };
-                            const char* fmatch = NULL;
-                            int fcount = 0;
+                        char matched_filename[MAX_FILENAME];
+                        int fcount = 0;
 
-                            for (int i = 0; sample_files[i] != NULL; i++) {
+                        for (int i = 0; i < MAX_FILES; i++) {
+                            char fname[MAX_FILENAME];
+                            if (vfs_get_filename(i, fname)) {
                                 int is_m = 1;
                                 for (int k = 0; k < arg_len; k++) {
-                                    if (arg[k] != sample_files[i][k]) {
+                                    if (arg[k] != fname[k]) {
                                         is_m = 0;
                                         break;
                                     }
                                 }
                                 if (is_m) {
-                                    fmatch = sample_files[i];
+                                    for (int k = 0; k < MAX_FILENAME; k++) {
+                                        matched_filename[k] = fname[k];
+                                    }
                                     fcount++;
                                 }
                             }
+                        }
 
-                            if (fcount == 1 && fmatch != NULL) {
-                                for (int k = arg_len; fmatch[k] != '\0'; k++) {
-                                    input_buf[buf_idx++] = fmatch[k];
-                                    vga_putc(fmatch[k], COLOR_WHITE);
+                        if (fcount == 1) {
+                            for (int k = arg_len; matched_filename[k] != '\0'; k++) {
+                                if (buf_idx < 63) {
+                                    input_buf[buf_idx++] = matched_filename[k];
+                                    vga_putc(matched_filename[k], COLOR_WHITE);
                                 }
-                                input_buf[buf_idx] = '\0';
                             }
+                            input_buf[buf_idx] = '\0';
                         }
                     }
                 }

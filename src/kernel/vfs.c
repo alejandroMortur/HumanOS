@@ -242,3 +242,14 @@ int vfs_delete_file(const char* name) {
 
     return -1; // Archivo no encontrado
 }
+
+int vfs_get_filename(int index, char* out_name) {
+    if (index < 0 || index >= MAX_FILES) return 0;
+    if (!file_table[index].used) return 0;
+    if (out_name) strcpy_impl(out_name, file_table[index].name);
+    return 1;
+}
+
+void vfs_sync(void) {
+    vfs_sync_to_disk();
+}

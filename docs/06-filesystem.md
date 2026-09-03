@@ -1,45 +1,45 @@
-# Sistema de Archivos (VFS) en HumanOS
+# File System (VFS) in HumanOS
 
-## Visión General
+## Overview
 
-HumanOS implementa un Virtual File System (VFS) simple que almacena archivos en disco duro ATA. El sistema usa un diseño flat (sin directorios) con metadatos en un sector fijo y datos en sectores consecutivos.
+HumanOS implements a Virtual File System (VFS) that stores files on ATA hard disk. The system uses a flat design (no directories) with metadata in a fixed sector and data in consecutive sectors.
 
-## Estructuras de Datos
+## Data Structures
 
 ### vfs_file_t
 
 ```c
 typedef struct {
-    char name[MAX_FILENAME];    // Nombre del archivo (32 caracteres)
-    uint32_t size;             // Tamaño en bytes
-    uint32_t start_lba;        // Sector inicial en disco
-    uint8_t used;              // 1 si archivo existe, 0 si libre
+    char name[MAX_FILENAME];    // File name (32 characters)
+    uint32_t size;             // Size in bytes
+    uint32_t start_lba;        // Starting sector on disk
+    uint8_t used;              // 1 if file exists, 0 if free
 } vfs_file_t;
 ```
 
-### Constantes
+### Constants
 
 ```c
-#define MAX_FILES 64            // Máximo de archivos
-#define MAX_FILENAME 32         // Máximo longitud de nombre
-#define MAX_FILE_SIZE 1024      // Máximo tamaño por archivo (1 KB)
-#define VFS_METADATA_LBA 100    // Sector de metadatos
-#define VFS_DATA_START_LBA 101 // Primer sector de datos
+#define MAX_FILES 64            // Maximum files
+#define MAX_FILENAME 32         // Maximum name length
+#define MAX_FILE_SIZE 1024      // Maximum size per file (1 KB)
+#define VFS_METADATA_LBA 100    // Metadata sector
+#define VFS_DATA_START_LBA 101 // First data sector
 ```
 
-## Layout del Disco
+## Disk Layout
 
 ```
-Sector 0-99:    Reservado (kernel, bootloader, etc.)
-Sector 100:     Metadatos VFS (file_table)
-Sector 101-102:  Archivo 0 (2 sectores = 1 KB)
-Sector 103-104:  Archivo 1 (2 sectores = 1 KB)
+Sector 0-99:    Reserved (kernel, bootloader, etc.)
+Sector 100:     VFS metadata (file_table)
+Sector 101-102:  File 0 (2 sectors = 1 KB)
+Sector 103-104:  File 1 (2 sectors = 1 KB)
 ...
-Sector 227-228:  Archivo 63 (2 sectores = 1 KB)
-Sector 229+:    Espacio libre
+Sector 227-228:  File 63 (2 sectors = 1 KB)
+Sector 229+:    Free space
 ```
 
-## Operaciones del VFS
+## VFS Operations
 
 ### vfs_create_file()
 
@@ -47,7 +47,7 @@ Sector 229+:    Espacio libre
 int vfs_create_file(const char* name);
 ```
 
-Crea un archivo nuevo o retorna índice si ya existe.
+Creates a new file or returns index if already exists.
 
 ### vfs_write_file()
 
@@ -55,7 +55,7 @@ Crea un archivo nuevo o retorna índice si ya existe.
 int vfs_write_file(const char* name, const char* content, uint32_t len);
 ```
 
-Escribe contenido a un archivo.
+Writes content to a file.
 
 ### vfs_read_file()
 
@@ -63,7 +63,7 @@ Escribe contenido a un archivo.
 int vfs_read_file(const char* name, char* buffer, uint32_t max_len);
 ```
 
-Lee contenido de un archivo.
+Reads content from a file.
 
 ### vfs_list_files()
 
@@ -71,14 +71,14 @@ Lee contenido de un archivo.
 void vfs_list_files(void);
 ```
 
-Lista todos los archivos en el sistema.
+Lists all files in the system.
 
-## Sincronización con Disco
+## Disk Synchronization
 
 ### vfs_sync_from_disk()
 
-Lee metadatos del sector 100 del disco ATA.
+Reads metadata from sector 100 of ATA disk.
 
 ### vfs_sync_to_disk()
 
-Escribe metadatos al sector 100 del disco ATA.
+Writes metadata to sector 100 of ATA disk.

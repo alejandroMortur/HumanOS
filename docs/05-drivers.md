@@ -1,24 +1,24 @@
-# Drivers de Hardware en HumanOS
+# Hardware Drivers in HumanOS
 
-## Visión General
+## Overview
 
-HumanOS incluye drivers para varios dispositivos de hardware esenciales:
-- **PIT (Programmable Interval Timer)**: Timer para scheduling
-- **Teclado PS/2**: Entrada de usuario
-- **VGA**: Salida de texto
-- **Serial COM1**: Logs de depuración
-- **ATA PIO**: Disco duro
+HumanOS includes drivers for several essential hardware devices:
+- **PIT (Programmable Interval Timer)**: Timer for scheduling
+- **PS/2 Keyboard**: User input
+- **VGA**: Text output
+- **Serial COM1**: Debug logs
+- **ATA PIO**: Hard disk
 
 ## 1. PIT (Programmable Interval Timer)
 
-### Descripción
+### Description
 
-El PIT 8254/8253 es un chip de temporización que genera interrupciones periódicas. HumanOS usa el canal 0 para generar IRQ0 a 100 Hz (10 ms por tick).
+The PIT 8254/8253 is a timing chip that generates periodic interrupts. HumanOS uses channel 0 to generate IRQ0 at 100 Hz (10 ms per tick).
 
-### Registros del PIT
+### PIT Registers
 
 ```
-I/O Port    Registro
+I/O Port    Register
 ────────────────────────────────
 0x40        Channel 0 Data Port
 0x41        Channel 1 Data Port
@@ -26,7 +26,7 @@ I/O Port    Registro
 0x43        Command/Mode Register
 ```
 
-### Inicialización
+### Initialization
 
 #### pit_init()
 
@@ -34,13 +34,13 @@ I/O Port    Registro
 void pit_init(uint32_t frequency);
 ```
 
-Proceso:
-1. Calcula divisor: `1193182 / frequency`
-2. Envía comando al PIT (puerto 0x43: 0x36)
-3. Envía divisor low byte (puerto 0x40)
-4. Envía divisor high byte (puerto 0x40)
+Process:
+1. Calculate divisor: `1193182 / frequency`
+2. Send command to PIT (port 0x43: 0x36)
+3. Send divisor low byte (port 0x40)
+4. Send divisor high byte (port 0x40)
 
-### Handler de IRQ0
+### IRQ0 Handler
 
 #### pit_handler()
 
@@ -50,16 +50,16 @@ void pit_handler(void) {
 }
 ```
 
-## 2. Teclado PS/2
+## 2. PS/2 Keyboard
 
-### Descripción
+### Description
 
-El teclado PS/2 usa el controlador 8042 para enviar scancodes al CPU. HumanOS implementa un driver básico que convierte scancodes a caracteres ASCII.
+The PS/2 keyboard uses the 8042 controller to send scancodes to the CPU. HumanOS implements a basic driver that converts scancodes to ASCII characters.
 
-### Registros del Controlador 8042
+### 8042 Controller Registers
 
 ```
-I/O Port    Registro                R/W
+I/O Port    Register                R/W
 ────────────────────────────────────────
 0x60        Data Port               R/W
 0x64        Command/Status Port     R (status), W (command)
@@ -71,26 +71,26 @@ I/O Port    Registro                R/W
 char keyboard_getchar(void);
 ```
 
-Retorna carácter ASCII o 0 si no hay dato.
+Returns ASCII character or 0 if no data.
 
 ## 3. VGA Text Mode
 
-### Descripción
+### Description
 
-La VGA en modo texto proporciona un framebuffer de 80x25 caracteres con 16 colores.
+VGA in text mode provides an 80x25 character framebuffer with 16 colors.
 
-### Memoria de Video
+### Video Memory
 
 ```
-Dirección: 0xB8000
-Tamaño: 80 * 25 * 2 = 4000 bytes
+Address: 0xB8000
+Size: 80 * 25 * 2 = 4000 bytes
 ```
 
-Cada carácter ocupa 2 bytes:
-- Byte 0: Carácter ASCII
-- Byte 1: Atributo de color
+Each character occupies 2 bytes:
+- Byte 0: ASCII character
+- Byte 1: Color attribute
 
-### Funciones VGA
+### VGA Functions
 
 #### vga_puts()
 
@@ -112,14 +112,14 @@ void vga_clear(void);
 
 ## 4. Serial COM1
 
-### Descripción
+### Description
 
-El puerto serie COM1 (0x3F8) se usa para logs de depuración.
+Serial port COM1 (0x3F8) is used for debug logging.
 
-### Registros del UART 16550
+### UART 16550 Registers
 
 ```
-I/O Port    Registro
+I/O Port    Register
 ────────────────────────────────
 0x3F8       THR / RBR
 0x3F9       IER
@@ -133,7 +133,7 @@ I/O Port    Registro
 void serial_init(void);
 ```
 
-Configura 115200 baud, 8N1.
+Configures 115200 baud, 8N1.
 
 ### serial_write()
 
@@ -143,14 +143,14 @@ void serial_write(const char* str);
 
 ## 5. ATA PIO (Parallel I/O)
 
-### Descripción
+### Description
 
-El driver ATA PIO permite acceso a discos duros IDE/PATA usando LBA28.
+The ATA PIO driver allows access to IDE/PATA hard disks using LBA28.
 
-### Registros ATA Primario
+### Primary ATA Registers
 
 ```
-I/O Port    Registro                R/W
+I/O Port    Register                R/W
 ────────────────────────────────────────
 0x1F0       Data Register           R/W
 0x1F2       Sector Count            R/W
@@ -167,7 +167,7 @@ I/O Port    Registro                R/W
 void ata_init(void);
 ```
 
-Detecta disco e imprime modelo y tamaño.
+Detects disk and prints model and size.
 
 ### ata_read_sector()
 
@@ -175,7 +175,7 @@ Detecta disco e imprime modelo y tamaño.
 int ata_read_sector(uint32_t lba, uint8_t* buffer);
 ```
 
-Lee un sector del disco.
+Reads one sector from disk.
 
 ### ata_write_sector()
 
@@ -183,18 +183,18 @@ Lee un sector del disco.
 int ata_write_sector(uint32_t lba, const uint8_t* buffer);
 ```
 
-Escribe un sector al disco.
+Writes one sector to disk.
 
 ## 6. PIC 8259
 
-### Re-mapeo
+### Remapping
 
-El PIC se re-mapea a IRQs 32-47 para evitar conflictos con excepciones del CPU.
+The PIC is remapped to IRQs 32-47 to avoid conflicts with CPU exceptions.
 
 ```
-IRQ Original    IRQ Re-mapeado    Dispositivo
+IRQ Original    IRQ Remapped    Device
 ─────────────────────────────────────────────
-IRQ0            32                PIT Timer
-IRQ1            33                Keyboard
-IRQ14           46                Primary ATA
+IRQ0            32              PIT Timer
+IRQ1            33              Keyboard
+IRQ14           46              Primary ATA
 ```

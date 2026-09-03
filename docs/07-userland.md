@@ -1,18 +1,18 @@
-# Userland y Shell en HumanOS
+# Userland and Shell in HumanOS
 
-## Visión General
+## Overview
 
-HumanOS implementa un shell interactivo en Ring 3 (modo usuario) que proporciona una interfaz de línea de comandos estilo Bash. El shell se ejecuta como un proceso separado y usa syscalls para interactuar con el kernel.
+HumanOS implements an interactive shell in Ring 3 (user mode) that provides a Bash-style command line interface. The shell runs as a separate process and uses syscalls to interact with the kernel.
 
-## Creación del Proceso Shell
+## Shell Process Creation
 
-El shell se crea como proceso Ring 3 en kernel_main:
+The shell is created as a Ring 3 process in kernel_main:
 
 ```c
 scheduler_add_user_process(user_shell_process, "UserShellRing3");
 ```
 
-## Implementación del Shell
+## Shell Implementation
 
 ### user_shell_process()
 
@@ -23,7 +23,7 @@ static void user_shell_process(void) {
     char input_buf[64];
     int buf_idx = 0;
 
-    // Historial de comandos
+    // Command history
     #define MAX_HIST 10
     static char cmd_history[MAX_HIST][64];
     static int hist_count = 0;
@@ -35,7 +35,7 @@ static void user_shell_process(void) {
         char c = 0;
         int bytes = sys_read(0, &c, 1);
         if (bytes > 0) {
-            // Procesar carácter...
+            // Process character...
         } else {
             sys_yield();
         }
@@ -43,77 +43,77 @@ static void user_shell_process(void) {
 }
 ```
 
-## Comandos Implementados
+## Implemented Commands
 
 ### help
-Lista todos los comandos disponibles.
+Lists all available commands.
 
 ### ls
-Lista archivos en el VFS.
+Lists files in VFS.
 
 ### cat
-Lee y muestra contenido de archivo.
+Reads and displays file contents.
 
 ### touch
-Crea archivo vacío.
+Creates empty file.
 
 ### write
-Escribe texto a archivo.
+Writes text to file.
 
 ### diskinfo
-Muestra información del disco duro.
+Displays hard disk information.
 
 ### sysinfo
-Muestra información del CPU.
+Displays CPU information.
 
 ### whoami
-Retorna "user".
+Returns "user".
 
 ### hostname
-Retorna "humanos".
+Returns "humanos".
 
 ### uname
-Retorna información del sistema operativo.
+Returns operating system information.
 
 ### ver
-Retorna versión del sistema.
+Returns system version.
 
 ### clear
-Limpia la pantalla.
+Clears the screen.
 
 ### ps
-Lista procesos activos.
+Lists active processes.
 
 ### reboot
-Reinicia el sistema.
+Reboots the system.
 
 ### shutdown
-Apaga el sistema.
+Shuts down the system.
 
 ### exit
-Termina el proceso shell.
+Terminates the shell process.
 
 ### run / exec
-Ejecuta binario ELF desde el VFS.
+Executes ELF binary from VFS.
 
-## Características
+## Features
 
-### Historial de Comandos
-- Últimos 10 comandos guardados
-- Navegación con flechas arriba/abajo
+### Command History
+- Last 10 commands saved
+- Navigation with up/down arrows
 
-### Autocompletado
-- Tabulador para autocompletar comandos
-- Tabulador para autocompletar nombres de archivos
+### Autocomplete
+- Tab to autocomplete commands
+- Tab to autocomplete file names
 
 ### Prompt
 ```
 user@humanos:~$ 
 ```
 
-## Syscalls Usados
+## Used Syscalls
 
-- sys_read() - Lee del teclado
-- sys_write() - Escribe a pantalla
-- sys_yield() - Cede control al scheduler
-- sys_exit() - Termina proceso
+- sys_read() - Read from keyboard
+- sys_write() - Write to screen
+- sys_yield() - Yield control to scheduler
+- sys_exit() - Terminate process

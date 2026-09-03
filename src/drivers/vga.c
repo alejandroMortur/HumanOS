@@ -13,7 +13,7 @@ static inline uint16_t vga_entry(unsigned char uc, uint8_t color) {
 
 // Scroll de pantalla cuando se llega al final de la linea 25
 static void vga_scroll(void) {
-    uint8_t color = 0x1E;
+    uint8_t color = COLOR_WHITE;
     if (cursor_y >= VGA_HEIGHT) {
         for (int i = 0; i < (VGA_HEIGHT - 1) * VGA_WIDTH; i++) {
             VGA_BUFFER[i] = VGA_BUFFER[i + VGA_WIDTH];
@@ -26,12 +26,16 @@ static void vga_scroll(void) {
 }
 
 void vga_init(void) {
-    uint8_t color = 0x1E; // Amarillo sobre Azul
+    uint8_t color = COLOR_WHITE; // Blanco sobre Negro
     for (int i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++) {
         VGA_BUFFER[i] = vga_entry(' ', color);
     }
     cursor_x = 0;
     cursor_y = 0;
+}
+
+void vga_clear(void) {
+    vga_init();
 }
 
 void vga_putc(char c, uint8_t color) {

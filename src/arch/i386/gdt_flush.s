@@ -1,4 +1,5 @@
 global gdt_flush
+global tss_flush
 extern gdt_ptr
 
 gdt_flush:
@@ -17,4 +18,9 @@ gdt_flush:
     jmp 0x08:.flush
 
 .flush:
+    ret
+
+tss_flush:
+    mov ax, 0x2B        ; Cargar selector TSS (0x28 | 3)
+    ltr ax              ; Cargar Task Register
     ret

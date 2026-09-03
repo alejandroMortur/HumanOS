@@ -64,20 +64,20 @@ void paging_init(void) {
             kernel_page_tables[dir_index]->entries[i].frame = 0;
         }
         
-        // Mapear las primeras 1024 páginas (4 MB) identity-mapped
+        // Mapear las primeras 1024 páginas (4 MB) identity-mapped permitiendo acceso de usuario (user = 1)
         for (int table_index = 0; table_index < 1024; table_index++) {
             uint32_t physical_addr = (dir_index * 1024 + table_index) * PAGE_SIZE;
             
             kernel_page_tables[dir_index]->entries[table_index].present = 1;
-            kernel_page_tables[dir_index]->entries[table_index].rw = 1;  // Read/Write
-            kernel_page_tables[dir_index]->entries[table_index].user = 0;  // Supervisor only
+            kernel_page_tables[dir_index]->entries[table_index].rw = 1;    // Read/Write
+            kernel_page_tables[dir_index]->entries[table_index].user = 1;  // User & Supervisor access
             kernel_page_tables[dir_index]->entries[table_index].frame = physical_addr >> 12;
         }
         
-        // Configurar entrada en directorio de páginas
+        // Configurar entrada en directorio de páginas (user = 1)
         kernel_page_directory->entries[dir_index].present = 1;
         kernel_page_directory->entries[dir_index].rw = 1;
-        kernel_page_directory->entries[dir_index].user = 0;
+        kernel_page_directory->entries[dir_index].user = 1;
         kernel_page_directory->entries[dir_index].frame = (uint32_t)kernel_page_tables[dir_index] >> 12;
     }
     

@@ -15,6 +15,15 @@ OBJS = build/boot.o \
        build/interrupts.o \
        build/gdt.o \
        build/idt.o \
+       build/isr.o \
+       build/syscall.o \
+       build/spinlock.o \
+       build/semaphore.o \
+       build/serial.o \
+       build/power.o \
+       build/cpu.o \
+       build/ata.o \
+       build/vfs.o \
        build/pmm.o \
        build/pit.o \
        build/heap.o \
@@ -22,7 +31,11 @@ OBJS = build/boot.o \
        build/scheduler.o \
        build/keyboard.o \
        build/vga.o  \
+       build/libc.o \
+       build/elf.o \
        build/main.o
+
+.PHONY: all clean
 
 all: $(ISO_OUT)
 
@@ -41,6 +54,33 @@ build/gdt.o: src/kernel/gdt.c
 	$(CC) $(CFLAGS) $< -o $@
 
 build/idt.o: src/kernel/idt.c
+	$(CC) $(CFLAGS) $< -o $@
+
+build/isr.o: src/kernel/isr.c
+	$(CC) $(CFLAGS) $< -o $@
+
+build/syscall.o: src/kernel/syscall.c
+	$(CC) $(CFLAGS) $< -o $@
+
+build/spinlock.o: src/kernel/spinlock.c
+	$(CC) $(CFLAGS) $< -o $@
+
+build/semaphore.o: src/kernel/semaphore.c
+	$(CC) $(CFLAGS) $< -o $@
+
+build/serial.o: src/drivers/serial.c
+	$(CC) $(CFLAGS) $< -o $@
+
+build/power.o: src/kernel/power.c
+	$(CC) $(CFLAGS) $< -o $@
+
+build/cpu.o: src/kernel/cpu.c
+	$(CC) $(CFLAGS) $< -o $@
+
+build/ata.o: src/drivers/ata.c
+	$(CC) $(CFLAGS) $< -o $@
+
+build/vfs.o: src/kernel/vfs.c
 	$(CC) $(CFLAGS) $< -o $@
 
 build/pmm.o: src/kernel/pmm.c
@@ -62,6 +102,12 @@ build/keyboard.o: src/drivers/keyboard.c
 	$(CC) $(CFLAGS) $< -o $@
 
 build/vga.o: src/drivers/vga.c
+	$(CC) $(CFLAGS) $< -o $@
+
+build/libc.o: src/user/libc.c
+	$(CC) $(CFLAGS) $< -o $@
+
+build/elf.o: src/kernel/elf.c
 	$(CC) $(CFLAGS) $< -o $@
 
 build/main.o: src/kernel/main.c

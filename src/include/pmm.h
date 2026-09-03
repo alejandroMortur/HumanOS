@@ -18,6 +18,7 @@ typedef struct {
 
 // Funciones PMM
 void pmm_init(uint32_t mem_size, uint32_t bitmap_addr);
+void pmm_init_multiboot(uint32_t mmap_addr, uint32_t mmap_length);
 void* pmm_alloc_page(void);
 void pmm_free_page(void* addr);
 uint32_t pmm_get_free_pages(void);

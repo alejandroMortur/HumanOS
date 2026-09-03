@@ -1,6 +1,7 @@
 #include "scheduler.h"
 #include "heap.h"
 #include "vga.h"
+#include "gdt.h"
 #include <stdint.h>
 
 #ifndef NULL
@@ -18,6 +19,15 @@ volatile uint8_t schedule_needed = 0;
 extern void context_switch(cpu_context_t* old_context, cpu_context_t* new_context);
 extern void task_switch(uint32_t* current_esp_ptr, uint32_t new_esp);
 extern void scheduler_yield_asm(void);
+
+// Trampolín de ejecución para envolver entry_point y llamar a process_exit(0) si retorna de forma normal
+static void process_wrapper(void) {
+    process_t* current = processes[current_process];
+    if (current != NULL && current->entry_point != NULL) {
+        current->entry_point();
+    }
+    process_exit(0);
+}
 
 // Inicializar scheduler
 void scheduler_init(void) {
@@ -45,10 +55,12 @@ void scheduler_convert_current_process(const char* name) {
         return;
     }
     
-    // Inicializar proceso
+    // Inicializar proceso KernelMain (ya en ejecución en el stack del kernel)
     proc->pid = next_pid++;
-    proc->state = PROCESS_READY;
-    proc->entry_point = NULL;  // No tiene punto de entrada, ya está ejecutándose
+    proc->state = PROCESS_RUNNING;
+    proc->entry_point = NULL;
+    proc->exit_code = 0;
+    proc->waiting_for_pid = 0;
     
     // Copiar nombre
     int i = 0;
@@ -58,71 +70,12 @@ void scheduler_convert_current_process(const char* name) {
     }
     proc->name[i] = '\0';
     
-    // Obtener ESP actual y construir marco de interrupción falso
-    uint32_t current_esp;
-    uint32_t current_eip;
-    uint32_t current_eflags;
+    proc->context.esp = 0; // Se actualizará al desapropiar o ceder
+    proc->context.eflags = 0x202;
     
-    __asm__ __volatile__(
-        "mov %%esp, %0\n"
-        "mov $1f, %1\n"
-        "pushf\n"
-        "pop %2\n"
-        "1:\n"
-        : "=r"(current_esp), "=r"(current_eip), "=r"(current_eflags)
-    );
-    
-    // Ajustar ESP para dejar espacio para el marco de interrupción falso
-    // El stack debe tener (de abajo a arriba): GS, FS, ES, DS, EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI, EIP, CS, EFLAGS, ESP, SS
-    // Esto es lo que scheduler_yield_asm espera: push gs, fs, es, ds, pushad, luego iretd
-    uint32_t* stack_ptr = (uint32_t*)current_esp;
-    stack_ptr -= 17;  // Dejar espacio para 17 valores
-    
-    // Construir marco de interrupción falso (orden correcto para scheduler_yield_asm)
-    // Primero los registros de segmento (push order: gs, fs, es, ds)
-    stack_ptr[0] = 0x10;  // GS
-    stack_ptr[1] = 0x10;  // FS
-    stack_ptr[2] = 0x10;  // ES
-    stack_ptr[3] = 0x10;  // DS
-    
-    // Luego pushad (EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI)
-    stack_ptr[4] = 0;   // EAX
-    stack_ptr[5] = 0;   // ECX
-    stack_ptr[6] = 0;   // EDX
-    stack_ptr[7] = 0;   // EBX
-    stack_ptr[8] = current_esp;  // ESP (valor original antes del ajuste)
-    stack_ptr[9] = 0;   // EBP
-    stack_ptr[10] = 0;  // ESI
-    stack_ptr[11] = 0;  // EDI
-    
-    // Finalmente el marco para iretd (EIP, CS, EFLAGS, ESP, SS)
-    // ESP debe apuntar al stack original (antes de reservar espacio para el marco)
-    stack_ptr[12] = current_eip;  // EIP
-    stack_ptr[13] = 0x08;  // CS (kernel code segment)
-    stack_ptr[14] = current_eflags | 0x202;  // EFLAGS (con interrupts enabled)
-    stack_ptr[15] = current_esp;  // ESP (valor original antes del ajuste)
-    stack_ptr[16] = 0x10;  // SS (data segment)
-    
-    // Configurar el contexto del proceso
-    // ESP debe apuntar al inicio del marco de iretd (SS), no al fondo del stack
-    proc->context.esp = (uint32_t)(stack_ptr + 16);  // Apuntar a SS
-    
-    // Limpiar el resto del contexto
-    proc->context.edi = 0;
-    proc->context.esi = 0;
-    proc->context.ebp = 0;
-    proc->context.ebx = 0;
-    proc->context.edx = 0;
-    proc->context.ecx = 0;
-    proc->context.eax = 0;
-    proc->context.eflags = current_eflags | 0x202;
-    
-    // Actualizar ESP real del procesador
-    __asm__ __volatile__("mov %0, %%esp" : : "r"(stack_ptr));
-    
-    // Agregar a la lista como primer proceso
-    processes[process_count] = proc;
-    process_count++;
+    // Agregar como proceso 0
+    processes[0] = proc;
+    process_count = 1;
     current_process = 0;
     
     vga_puts("[SCHEDULER] Converted current process: ", 0x1A);
@@ -130,26 +83,25 @@ void scheduler_convert_current_process(const char* name) {
     vga_putc('\n', 0x1A);
 }
 
-// Agregar proceso al scheduler
+// Agregar proceso al scheduler (Modo Kernel - Ring 0)
 void scheduler_add_process(void (*entry)(void), const char* name) {
     if (process_count >= MAX_PROCESSES) {
         vga_puts("[SCHEDULER] Max processes reached\n", 0x1C);
         return;
     }
     
-    // Asignar memoria para el proceso
     process_t* proc = (process_t*)kmalloc(sizeof(process_t));
     if (proc == NULL) {
         vga_puts("[SCHEDULER] Failed to allocate process\n", 0x1C);
         return;
     }
     
-    // Inicializar proceso
     proc->pid = next_pid++;
     proc->state = PROCESS_READY;
     proc->entry_point = entry;
+    proc->exit_code = 0;
+    proc->waiting_for_pid = 0;
     
-    // Copiar nombre
     int i = 0;
     while (name[i] != '\0' && i < 31) {
         proc->name[i] = name[i];
@@ -157,69 +109,100 @@ void scheduler_add_process(void (*entry)(void), const char* name) {
     }
     proc->name[i] = '\0';
     
-    // Configurar stack con marco de interrupción falso
     uint32_t* stack_top = (uint32_t*)&proc->kernel_stack[KERNEL_STACK_SIZE];
     
-    // Construir marco de interrupción falso (de arriba a abajo en el stack)
-    stack_top--;  // SS (no usado en ring 0)
-    *stack_top = 0x10;  // Data segment
-    stack_top--;  // ESP (no usado)
-    *stack_top = 0;
-    stack_top--;  // EFLAGS (con interrupts enabled)
-    *stack_top = 0x202;
-    stack_top--;  // CS (kernel code segment)
-    *stack_top = 0x08;
-    stack_top--;  // EIP (punto de entrada del proceso)
-    *stack_top = (uint32_t)entry;
+    // 1. Marco para iretd (Kernel CS: 0x08)
+    stack_top--; *stack_top = 0x202;                      // EFLAGS (Interrupts enabled)
+    stack_top--; *stack_top = KERNEL_CS;                  // CS (Kernel Code Segment 0x08)
+    stack_top--; *stack_top = (uint32_t)process_wrapper;  // EIP (Trampolín de ejecución)
     
-    // Registros generales (pusha order: EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI)
-    stack_top--;  // EDI
-    *stack_top = 0;
-    stack_top--;  // ESI
-    *stack_top = 0;
-    stack_top--;  // EBP
-    *stack_top = 0;
-    stack_top--;  // ESP (dummy)
-    *stack_top = 0;
-    stack_top--;  // EBX
-    *stack_top = 0;
-    stack_top--;  // EDX
-    *stack_top = 0;
-    stack_top--;  // ECX
-    *stack_top = 0;
-    stack_top--;  // EAX
-    *stack_top = 0;
+    // 2. Registros generales para popa
+    stack_top--; *stack_top = 0;  // EAX
+    stack_top--; *stack_top = 0;  // ECX
+    stack_top--; *stack_top = 0;  // EDX
+    stack_top--; *stack_top = 0;  // EBX
+    stack_top--; *stack_top = 0;  // ESP (dummy)
+    stack_top--; *stack_top = 0;  // EBP
+    stack_top--; *stack_top = 0;  // ESI
+    stack_top--; *stack_top = 0;  // EDI
     
-    // Registros de segmento
-    stack_top--;  // DS
-    *stack_top = 0x10;
-    stack_top--;  // ES
-    *stack_top = 0x10;
-    stack_top--;  // FS
-    *stack_top = 0x10;
-    stack_top--;  // GS
-    *stack_top = 0x10;
+    // 3. Registros de segmento (Kernel DS: 0x10)
+    stack_top--; *stack_top = KERNEL_DS; // DS
+    stack_top--; *stack_top = KERNEL_DS; // ES
+    stack_top--; *stack_top = KERNEL_DS; // FS
+    stack_top--; *stack_top = KERNEL_DS; // GS
     
     proc->context.esp = (uint32_t)stack_top;
-    proc->context.eip = (uint32_t)entry;
-    
-    // Limpiar el resto del contexto
-    proc->context.edi = 0;
-    proc->context.esi = 0;
-    proc->context.ebp = 0;
-    proc->context.ebx = 0;
-    proc->context.edx = 0;
-    proc->context.ecx = 0;
-    proc->context.eax = 0;
     proc->context.eflags = 0x202;
     
-    // Agregar a la lista
     processes[process_count] = proc;
     process_count++;
     
-    vga_puts("[SCHEDULER] Added process: ", 0x1A);
+    vga_puts("[SCHEDULER] Added Kernel Process (Ring 0): ", 0x1A);
     vga_puts(proc->name, 0x1A);
     vga_putc('\n', 0x1A);
+}
+
+// Agregar proceso de usuario al scheduler (Modo Usuario - Ring 3)
+void scheduler_add_user_process(void (*entry)(void), const char* name) {
+    if (process_count >= MAX_PROCESSES) {
+        vga_puts("[SCHEDULER] Max processes reached\n", 0x1C);
+        return;
+    }
+    
+    process_t* proc = (process_t*)kmalloc(sizeof(process_t));
+    if (proc == NULL) {
+        vga_puts("[SCHEDULER] Failed to allocate process\n", 0x1C);
+        return;
+    }
+    
+    proc->pid = next_pid++;
+    proc->state = PROCESS_READY;
+    proc->entry_point = entry;
+    proc->exit_code = 0;
+    proc->waiting_for_pid = 0;
+    
+    int i = 0;
+    while (name[i] != '\0' && i < 31) {
+        proc->name[i] = name[i];
+        i++;
+    }
+    proc->name[i] = '\0';
+    
+    uint32_t* stack_top = (uint32_t*)&proc->kernel_stack[KERNEL_STACK_SIZE];
+    
+    // Marco iretd para Ring 3 (requiere SS y User ESP en la pila)
+    stack_top--; *stack_top = USER_DS;                     // User SS (0x23)
+    stack_top--; *stack_top = (uint32_t)&proc->kernel_stack[KERNEL_STACK_SIZE - 256]; // User ESP
+    stack_top--; *stack_top = 0x202;                       // EFLAGS (Interrupts enabled)
+    stack_top--; *stack_top = USER_CS;                     // User CS (0x1B = 0x18 | 3)
+    stack_top--; *stack_top = (uint32_t)entry;             // EIP (Direct User Function Entry)
+    
+    // Registros generales para popa
+    stack_top--; *stack_top = 0;  // EAX
+    stack_top--; *stack_top = 0;  // ECX
+    stack_top--; *stack_top = 0;  // EDX
+    stack_top--; *stack_top = 0;  // EBX
+    stack_top--; *stack_top = 0;  // ESP (dummy)
+    stack_top--; *stack_top = 0;  // EBP
+    stack_top--; *stack_top = 0;  // ESI
+    stack_top--; *stack_top = 0;  // EDI
+    
+    // Registros de segmento de usuario (0x23)
+    stack_top--; *stack_top = USER_DS; // DS (0x23)
+    stack_top--; *stack_top = USER_DS; // ES (0x23)
+    stack_top--; *stack_top = USER_DS; // FS (0x23)
+    stack_top--; *stack_top = USER_DS; // GS (0x23)
+    
+    proc->context.esp = (uint32_t)stack_top;
+    proc->context.eflags = 0x202;
+    
+    processes[process_count] = proc;
+    process_count++;
+    
+    vga_puts("[SCHEDULER] Added User Process (Ring 3): ", COLOR_LIGHT_GREEN);
+    vga_puts(proc->name, COLOR_LIGHT_GREEN);
+    vga_putc('\n', COLOR_LIGHT_GREEN);
 }
 
 // Ceder control al scheduler (wrapper público)
@@ -231,20 +214,43 @@ void scheduler_yield(void) {
 }
 
 // Implementación interna del scheduler (llamada desde assembly)
-void scheduler_yield_impl(void) {
+uint32_t scheduler_yield_impl(uint32_t current_esp) {
+    if (process_count <= 1) {
+        return 0;
+    }
+    
     uint32_t next = (current_process + 1) % process_count;
     
-    if (processes[next] == NULL || processes[next]->state != PROCESS_READY) {
-        return;
+    uint32_t count = 0;
+    while (count < process_count) {
+        if (processes[next] != NULL && processes[next]->state == PROCESS_READY) {
+            break;
+        }
+        next = (next + 1) % process_count;
+        count++;
+    }
+    
+    if (count >= process_count || next == current_process) {
+        return 0;  // No hay otro proceso READY para cambiar
     }
     
     process_t* current_proc = processes[current_process];
     process_t* next_proc = processes[next];
     
-    current_process = next;
+    if (current_proc != NULL && current_proc->state == PROCESS_RUNNING) {
+        current_proc->state = PROCESS_READY;
+        current_proc->context.esp = current_esp;
+    } else if (current_proc != NULL) {
+        current_proc->context.esp = current_esp;
+    }
     
-    // Usar task_switch con iretd uniforme
-    task_switch(&current_proc->context.esp, next_proc->context.esp);
+    current_process = next;
+    next_proc->state = PROCESS_RUNNING;
+    
+    // Actualizar esp0 del TSS al stack del kernel del siguiente proceso
+    tss_set_kernel_stack((uint32_t)&next_proc->kernel_stack[KERNEL_STACK_SIZE]);
+    
+    return next_proc->context.esp;
 }
 
 // Tick del scheduler (llamado por PIT)
@@ -259,7 +265,6 @@ void scheduler_tick(void) {
     // Hacer cambio de contexto cada 10 ticks (100 ms)
     if (tick_counter >= 10) {
         tick_counter = 0;
-        // Marcar que se necesita cambio - el irq0_stub lo manejará
         schedule_needed = 1;
     }
 }
@@ -270,6 +275,116 @@ uint32_t scheduler_get_current_pid(void) {
         return 0;
     }
     return processes[current_process]->pid;
+}
+
+// Obtener puntero al proceso actual
+process_t* scheduler_get_current_process(void) {
+    if (process_count == 0) {
+        return NULL;
+    }
+    return processes[current_process];
+}
+
+// Finalizar de forma limpia el proceso actual
+void process_exit(int exit_code) {
+    process_t* current = processes[current_process];
+    if (current == NULL) return;
+    
+    current->state = PROCESS_TERMINATED;
+    current->exit_code = exit_code;
+    
+    vga_puts("[SCHEDULER] Process '", 0x1E);
+    vga_puts(current->name, 0x1E);
+    vga_puts("' (PID ", 0x1E);
+    
+    char buf[16];
+    int count = current->pid;
+    int j = 0;
+    while (count > 0 && j < 15) {
+        buf[j++] = '0' + (count % 10);
+        count /= 10;
+    }
+    for (int k = j - 1; k >= 0; k--) vga_putc(buf[k], 0x1E);
+    
+    vga_puts(") exited with code ", 0x1E);
+    count = exit_code < 0 ? -exit_code : exit_code;
+    j = 0;
+    if (count == 0) buf[j++] = '0';
+    while (count > 0 && j < 15) {
+        buf[j++] = '0' + (count % 10);
+        count /= 10;
+    }
+    if (exit_code < 0) vga_putc('-', 0x1E);
+    for (int k = j - 1; k >= 0; k--) vga_putc(buf[k], 0x1E);
+    vga_puts("\n", 0x1E);
+    
+    // Despertar a los procesos en PROCESS_BLOCKED que esperaban a este PID
+    for (uint32_t i = 0; i < process_count; i++) {
+        if (processes[i] != NULL && processes[i]->state == PROCESS_BLOCKED && processes[i]->waiting_for_pid == current->pid) {
+            processes[i]->state = PROCESS_READY;
+            processes[i]->waiting_for_pid = 0;
+        }
+    }
+    
+    // Ceder el control inmediatamente a otro proceso
+    scheduler_yield();
+}
+
+// Cancelar un proceso dinámicamente por su PID
+int process_kill(uint32_t pid) {
+    for (uint32_t i = 0; i < process_count; i++) {
+        if (processes[i] != NULL && processes[i]->pid == pid && processes[i]->state != PROCESS_TERMINATED) {
+            processes[i]->state = PROCESS_TERMINATED;
+            processes[i]->exit_code = -1;
+            
+            vga_puts("[SCHEDULER] Process '", 0x1C);
+            vga_puts(processes[i]->name, 0x1C);
+            vga_puts("' killed.\n", 0x1C);
+            
+            // Despertar a procesos que esperaban por él
+            for (uint32_t j = 0; j < process_count; j++) {
+                if (processes[j] != NULL && processes[j]->state == PROCESS_BLOCKED && processes[j]->waiting_for_pid == pid) {
+                    processes[j]->state = PROCESS_READY;
+                    processes[j]->waiting_for_pid = 0;
+                }
+            }
+            
+            if (i == current_process) {
+                scheduler_yield();
+            }
+            return 0;
+        }
+    }
+    return -1;
+}
+
+// Bloquear el proceso actual hasta que finalice el proceso objetivo (PID)
+int process_wait(uint32_t pid) {
+    process_t* current = processes[current_process];
+    if (current == NULL) return -1;
+    
+    process_t* target = NULL;
+    for (uint32_t i = 0; i < process_count; i++) {
+        if (processes[i] != NULL && processes[i]->pid == pid) {
+            target = processes[i];
+            break;
+        }
+    }
+    
+    if (target == NULL) return -1;
+    
+    if (target->state == PROCESS_TERMINATED) {
+        return target->exit_code;
+    }
+    
+    current->state = PROCESS_BLOCKED;
+    current->waiting_for_pid = pid;
+    
+    while (target->state != PROCESS_TERMINATED) {
+        scheduler_yield();
+    }
+    
+    return target->exit_code;
 }
 
 // Verificar si se necesita cambio de contexto (llamado desde loop principal)

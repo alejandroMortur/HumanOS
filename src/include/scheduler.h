@@ -32,20 +32,29 @@ typedef struct {
 typedef struct {
     uint32_t pid;
     process_state_t state;
+    int exit_code;
+    uint32_t waiting_for_pid;
     cpu_context_t context;
     uint8_t kernel_stack[KERNEL_STACK_SIZE];
     void (*entry_point)(void);
     char name[32];
 } process_t;
 
-// Funciones del scheduler
+// Funciones del scheduler y gestión de procesos
 void scheduler_init(void);
 void scheduler_convert_current_process(const char* name);
 void scheduler_add_process(void (*entry)(void), const char* name);
+void scheduler_add_user_process(void (*entry)(void), const char* name);
 void scheduler_yield(void);
-void scheduler_yield_impl(void);
+uint32_t scheduler_yield_impl(uint32_t current_esp);
 void scheduler_tick(void);
 void scheduler_check(void);
 uint32_t scheduler_get_current_pid(void);
+process_t* scheduler_get_current_process(void);
+
+// API de gestión de procesos
+void process_exit(int exit_code);
+int process_kill(uint32_t pid);
+int process_wait(uint32_t pid);
 
 #endif

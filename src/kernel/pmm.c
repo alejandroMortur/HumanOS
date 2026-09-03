@@ -63,6 +63,94 @@ void pmm_init(uint32_t mem_size, uint32_t __attribute__((unused)) bitmap_addr) {
     vga_puts(" MB)\n", 0x1A);
 }
 
+typedef struct {
+    uint32_t size;
+    uint64_t addr;
+    uint64_t len;
+    uint32_t type;
+} __attribute__((packed)) multiboot_memory_map_t;
+
+// Inicializar PMM procesando dinámicamente el Mapa de Memoria de Multiboot
+void pmm_init_multiboot(uint32_t mmap_addr, uint32_t mmap_length) {
+    vga_puts("[PMM] Parsing Multiboot Memory Map...\n", 0x1A);
+    
+    // 1. Determinar el límite superior de memoria utilizable
+    uint64_t max_usable_addr = 0;
+    multiboot_memory_map_t* mmap = (multiboot_memory_map_t*)mmap_addr;
+    uint32_t mmap_end = mmap_addr + mmap_length;
+    
+    while ((uint32_t)mmap < mmap_end) {
+        if (mmap->type == 1) { // Type 1 = RAM Utilizable
+            uint64_t end_addr = mmap->addr + mmap->len;
+            if (end_addr > max_usable_addr) {
+                max_usable_addr = end_addr;
+            }
+        }
+        mmap = (multiboot_memory_map_t*)((uint32_t)mmap + mmap->size + sizeof(mmap->size));
+    }
+    
+    if (max_usable_addr > 0xFFFFFFFF) {
+        max_usable_addr = 0xFFFFFFFF;
+    }
+    
+    uint32_t total_mem_bytes = (uint32_t)max_usable_addr;
+    pmm.total_pages = total_mem_bytes / PAGE_SIZE;
+    pmm.bitmap = pmm_bitmap;
+    pmm.bitmap_size = (pmm.total_pages + 31) / 32;
+    
+    if (pmm.bitmap_size > 32768) {
+        pmm.bitmap_size = 32768;
+        pmm.total_pages = pmm.bitmap_size * 32;
+    }
+    
+    // Marcar inicialmente TODAS las páginas como USADAS (reservadas)
+    for (uint32_t i = 0; i < pmm.bitmap_size; i++) {
+        pmm.bitmap[i] = 0xFFFFFFFF;
+    }
+    pmm.used_pages = pmm.total_pages;
+    pmm.free_pages = 0;
+    
+    // 2. Marcar como LIBRES únicamente los bloques tipo 1 (RAM Utilizable)
+    mmap = (multiboot_memory_map_t*)mmap_addr;
+    while ((uint32_t)mmap < mmap_end) {
+        if (mmap->type == 1) {
+            uint32_t start_page = (uint32_t)(mmap->addr / PAGE_SIZE);
+            uint32_t end_page = (uint32_t)((mmap->addr + mmap->len) / PAGE_SIZE);
+            
+            for (uint32_t page = start_page; page < end_page && page < pmm.total_pages; page++) {
+                pmm_mark_free(page * PAGE_SIZE);
+            }
+        }
+        mmap = (multiboot_memory_map_t*)((uint32_t)mmap + mmap->size + sizeof(mmap->size));
+    }
+    
+    // 3. Proteger los primeros 2 MB (Kernel, BIOS IVT/BDA, VGA buffer)
+    for (uint32_t addr = 0; addr < 0x200000; addr += PAGE_SIZE) {
+        pmm_mark_used(addr);
+    }
+    
+    vga_puts("[PMM] Multiboot RAM detected: ", 0x1A);
+    char buf[16];
+    uint32_t mem_mb = (pmm.total_pages * PAGE_SIZE) / (1024 * 1024);
+    int count = mem_mb;
+    int j = 0;
+    while (count > 0 && j < 15) {
+        buf[j++] = '0' + (count % 10);
+        count /= 10;
+    }
+    for (int k = j - 1; k >= 0; k--) vga_putc(buf[k], 0x1A);
+    vga_puts(" MB, Free: ", 0x1A);
+    
+    count = pmm.free_pages;
+    j = 0;
+    while (count > 0 && j < 15) {
+        buf[j++] = '0' + (count % 10);
+        count /= 10;
+    }
+    for (int k = j - 1; k >= 0; k--) vga_putc(buf[k], 0x1A);
+    vga_puts(" pages\n", 0x1A);
+}
+
 // Asignar una página física
 void* pmm_alloc_page(void) {
     if (pmm.free_pages == 0) {

@@ -33,17 +33,30 @@ static void strcpy_impl(char* dest, const char* src) {
 // Cargar tabla de archivos desde el sector 100 del disco duro (512 bytes exactos)
 static void vfs_sync_from_disk(void) {
     uint8_t buf[512];
-    if (ata_read_sector(VFS_METADATA_LBA, buf) == 0) {
+    int result = ata_read_sector(VFS_METADATA_LBA, buf);
+    if (result == 0) {
         vfs_file_t* disk_files = (vfs_file_t*)buf;
+        int found_files = 0;
         for (int i = 0; i < MAX_FILES; i++) {
             if (disk_files[i].used == 1 && disk_files[i].size <= MAX_FILE_SIZE) {
                 file_table[i] = disk_files[i];
+                found_files++;
             } else {
                 file_table[i].used = 0;
                 file_table[i].size = 0;
                 file_table[i].name[0] = '\0';
             }
         }
+        vga_puts("[VFS] Loaded ", COLOR_LIGHT_CYAN);
+        char fbuf[16];
+        int fj = 0;
+        int fc = found_files;
+        if (fc == 0) fbuf[fj++] = '0';
+        while (fc > 0 && fj < 15) { fbuf[fj++] = '0' + (fc % 10); fc /= 10; }
+        for (int k = fj - 1; k >= 0; k--) vga_putc(fbuf[k], COLOR_WHITE);
+        vga_puts(" files from disk\n", COLOR_LIGHT_CYAN);
+    } else {
+        vga_puts("[VFS] ERROR: Failed to read metadata from disk!\n", COLOR_RED);
     }
 }
 
@@ -54,7 +67,12 @@ static void vfs_sync_to_disk(void) {
     for (int i = 0; i < MAX_FILES; i++) {
         disk_files[i] = file_table[i];
     }
-    ata_write_sector(VFS_METADATA_LBA, buf);
+    int result = ata_write_sector(VFS_METADATA_LBA, buf);
+    if (result == 0) {
+        vga_puts("[VFS] Metadata synced to disk (sector 100)\n", COLOR_LIGHT_CYAN);
+    } else {
+        vga_puts("[VFS] ERROR: Failed to sync metadata to disk!\n", COLOR_RED);
+    }
 }
 
 void vfs_init(void) {

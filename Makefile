@@ -8,6 +8,7 @@ ASFLAGS = -f elf32
 LINKER = src/arch/i386/linker.ld
 KERNEL_BIN = build/mykernel.bin
 ISO_OUT = build/HumanOS.iso
+DISK_IMG = build/hdd.img
 
 # Mapeo de Objetos
 OBJS = build/boot.o \
@@ -35,9 +36,13 @@ OBJS = build/boot.o \
        build/elf.o \
        build/main.o
 
-.PHONY: all clean
+.PHONY: all clean disk run
 
-all: $(ISO_OUT)
+all: $(ISO_OUT) $(DISK_IMG)
+
+# Crear disco virtual persistente (10 MB)
+$(DISK_IMG):
+	dd if=/dev/zero of=$(DISK_IMG) bs=1M count=10 2>/dev/null || fsutil file createNew $(DISK_IMG) 10485760
 
 # Reglas Ensamblador
 build/boot.o: src/arch/i386/boot.s
@@ -126,3 +131,7 @@ $(ISO_OUT): $(KERNEL_BIN)
 
 clean:
 	rm -rf build/* iso/boot/mykernel.bin $(ISO_OUT)
+
+# Ejecutar en QEMU con disco persistente
+run: $(ISO_OUT) $(DISK_IMG)
+	qemu-system-i386 -cdrom $(ISO_OUT) -drive file=$(DISK_IMG),format=raw,media=disk

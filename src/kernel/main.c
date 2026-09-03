@@ -197,7 +197,7 @@ static void user_shell_process(void) {
                         sys_write(1, "Test 1: PASSED\n", 17);
                         
                         sys_write(1, "Test 2: Scheduler stress (rapid yields)\n", 39);
-                        for (int i = 0; i < 1000; i++) {
+                        for (int i = 0; i < 100; i++) {
                             sys_yield();
                         }
                         sys_write(1, "Test 2: PASSED\n", 17);

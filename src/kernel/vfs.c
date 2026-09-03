@@ -77,11 +77,12 @@ void vfs_init(void) {
         const char* init_msg = "Welcome to HumanOS File System on ATA Disk!";
         int len = 0;
         while (init_msg[len] != '\0') len++;
-        file_table[0].size = len;
+        file_table[0].size = len + 1; // Include null terminator in size
         
         uint8_t sector_buf[512];
         for (int i = 0; i < 512; i++) sector_buf[i] = 0;
         for (int i = 0; i < len; i++) sector_buf[i] = (uint8_t)init_msg[i];
+        sector_buf[len] = '\0'; // Add null terminator
         
         ata_write_sector(file_table[0].start_lba, sector_buf);
         vfs_sync_to_disk();

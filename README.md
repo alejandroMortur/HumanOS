@@ -118,10 +118,24 @@ qemu-system-i386 -cdrom build/HumanOS.iso
 ```
 
 ### Running in VirtualBox
-Create a new VM with:
-- **OS Type**: Other/Unknown (32-bit)
-- **Memory**: 32 MB minimum
-- **Storage**: Attach `build/HumanOS.iso` as CD/DVD
+
+**First time setup:**
+
+1. Create a new VM with:
+   - **OS Type**: Other/Unknown (32-bit)
+   - **Memory**: 32 MB minimum
+   - **Storage**: Create new disk (skip for now)
+
+2. After creating the VM, go to Settings → Storage:
+   - Attach `build/HumanOS.iso` as CD/DVD (IDE Secondary Master)
+   - Attach `build/hdd.img` as Hard Disk (IDE Primary Master)
+     - Click "Add" → "Choose existing disk"
+     - Select `build/hdd.img` from the project folder
+     - Make sure it's set as "IDE Primary Master"
+
+3. Start the VM
+
+**Note**: The `hdd.img` file is created automatically when you run `make`. It's a 10 MB persistent disk that stores your files between reboots.
 
 ---
 

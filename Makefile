@@ -133,5 +133,8 @@ clean:
 	rm -rf build/* iso/boot/mykernel.bin $(ISO_OUT)
 
 # Ejecutar en QEMU con disco persistente
-run: $(ISO_OUT) $(DISK_IMG)
+run-qemu: $(ISO_OUT) $(DISK_IMG)
 	qemu-system-i386 -cdrom $(ISO_OUT) -drive id=disk,file=$(DISK_IMG),if=ide,media=disk,format=raw -device ide-hd,drive=disk,bus=ide.0,unit=0
+
+# Ejecutar en QEMU con disco persistente (alias)
+run: run-qemu
